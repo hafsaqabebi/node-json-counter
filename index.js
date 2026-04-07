@@ -1,16 +1,50 @@
 const express = require("express");
 const fs = require("fs");
+const path = require("path");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-app.get("/", (req, res) => {
-  let data = JSON.parse(fs.readFileSync("visits.json"));
-  data.visits++;
+const FILE = path.join(__dirname, "visits.json");
 
-  fs.writeFileSync("visits.json", JSON.stringify(data));
+let lock = false;
 
-  res.send(`Nombre de visites : ${data.visits}`);
+function readCounter() {
+  try {
+    if (!fs.existsSync(FILE)) {
+      fs.writeFileSync(FILE, JSON.stringify({ count: 0 }));
+    }
+    const data = fs.readFileSync(FILE);
+    return JSON.parse(data).count;
+  } catch (err) {
+    console.error("Erreur lecture JSON:", err);
+    return 0;
+  }
+}
+
+function writeCounter(count) {
+  try {
+    fs.writeFileSync(FILE, JSON.stringify({ count }, null, 2));
+  } catch (err) {
+    console.error("Erreur écriture JSON:", err);
+  }
+}
+
+app.get("/", async (req, res) => {
+  while (lock) {
+    await new Promise(r => setTimeout(r, 10));
+  }
+
+  lock = true;
+  try {
+    let count = readCounter();
+    count++;
+    writeCounter(count);
+
+    res.send(`Nombre de visites : ${count}`);
+  } finally {
+    lock = false;
+  }
 });
 
 app.listen(PORT, () => {
